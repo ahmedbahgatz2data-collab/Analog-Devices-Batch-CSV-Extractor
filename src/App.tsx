@@ -76,10 +76,13 @@ export default function App() {
   };
 
   const handleProcessUrls = async () => {
-    const lines = urlsInput
+    const rawLines = urlsInput
       .split('\n')
       .map(l => l.trim())
       .filter(l => l && l.startsWith('http'));
+
+    // Remove duplicate URLs to save resources
+    const lines = Array.from(new Set(rawLines));
 
     if (lines.length === 0) {
       alert('Please enter at least one valid URL starting with https://');
@@ -403,7 +406,7 @@ export default function App() {
 
             {/* Collapsible List of processed files */}
             {showDetails && (
-              <div className="space-y-3 pt-2">
+              <div className="space-y-3 pt-2 max-h-80 overflow-y-auto pr-1">
                 {results.map((res, idx) => (
                   <div key={idx} className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
                     res.success ? 'bg-slate-50 border-slate-200' : 'bg-rose-50 border-rose-200'
