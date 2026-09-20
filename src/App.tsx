@@ -94,13 +94,17 @@ export default function App() {
     setResults([]);
     setShowDetails(false);
 
-    const processed: ProcessedFileResult[] = [];
+    const processed: ProcessedFileResult[] = new Array(lines.length);
+    let completedCount = 0;
+    const concurrencyLimit = 5;
+    let index = 0;
 
-    for (let i = 0; i < lines.length; i++) {
-      const url = lines[i];
-      setProgress({ current: i + 1, total: lines.length });
+    const processNext = async (): Promise<void> => {
+      if (index >= lines.length) return;
+      const currentIndex = index++;
+      const url = lines[currentIndex];
       
-      let filename = url.split('/').pop() || `part_${i + 1}.js`;
+      let filename = url.split('/').pop() || `part_${currentIndex + 1}.js`;
       if (filename.includes('?')) filename = filename.split('?')[0];
       if (!filename.endsWith('.csv')) {
         filename = filename.replace(/\.[^/.]+$/, '') + '.csv';
@@ -158,16 +162,16 @@ export default function App() {
             });
           }
 
-          processed.push({
+          processed[currentIndex] = {
             url,
             filename,
             success: true,
             parts,
             records
-          });
+          };
         } else {
           const errMsg = data.error || 'Failed to fetch or parse endpoint (404/Error)';
-          processed.push({
+          processed[currentIndex] = {
             url,
             filename,
             success: false,
@@ -181,11 +185,11 @@ export default function App() {
               modelLifeCycle: 'ERROR'
             }],
             error: errMsg
-          });
+          };
         }
       } catch (err: any) {
         const errMsg = err.message || 'Network error';
-        processed.push({
+        processed[currentIndex] = {
           url,
           filename,
           success: false,
@@ -199,9 +203,22 @@ export default function App() {
             modelLifeCycle: 'ERROR'
           }],
           error: errMsg
-        });
+        };
       }
-    }
+
+      completedCount++;
+      setProgress({ current: completedCount, total: lines.length });
+
+      if (index < lines.length) {
+        return processNext();
+      }
+    };
+
+    const workers = Array(Math.min(concurrencyLimit, lines.length))
+      .fill(null)
+      .map(() => processNext());
+
+    await Promise.all(workers);
 
     setResults(processed);
     setProcessing(false);
@@ -287,15 +304,8 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-lg font-bold text-slate-900 tracking-tight">Analog Devices Batch CSV Extractor</h1>
-              <p className="text-xs text-slate-500 flex items-center gap-1.5">
-                <span>By Eng Ahmed Bahgat</span>
-                <span className="inline-flex items-center px-1.5 py-0.2 bg-blue-50 text-blue-700 rounded font-semibold text-[10px]">Pro Edition</span>
-              </p>
+              <p className="text-xs text-slate-500">Extract URLs to CSV / ZIP with strict schema</p>
             </div>
-          </div>
-          <div className="hidden sm:flex items-center space-x-1.5 text-xs font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-xl">
-            <Award className="w-4 h-4 text-blue-600" />
-            <span>Eng Ahmed Bahgat</span>
           </div>
         </div>
       </header>

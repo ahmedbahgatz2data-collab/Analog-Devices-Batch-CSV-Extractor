@@ -4,8 +4,17 @@ import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+let __dirname = process.cwd();
+try {
+  if (typeof __filename === 'undefined' && typeof import.meta !== 'undefined' && import.meta.url) {
+    const __filename = fileURLToPath(import.meta.url);
+    __dirname = path.dirname(__filename);
+  } else if (typeof __dirname !== 'undefined') {
+    // Already available in CJS
+  }
+} catch (e) {
+  __dirname = process.cwd();
+}
 
 async function startServer() {
   const app = express();
@@ -173,7 +182,7 @@ Please answer comprehensively in ${language === 'ar' ? 'Arabic' : 'English'}, pr
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, "dist");
+    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
