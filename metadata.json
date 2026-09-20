@@ -1,0 +1,7 @@
+{
+  "name": "Analog Devices Data Extractor & Analyzer",
+  "description": "Extract, parse, search, filter, and analyze e-commerce and product catalog data from Analog Devices JS endpoints with Gemini AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
