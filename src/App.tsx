@@ -29,6 +29,7 @@ interface ProcessedFileResult {
     generic: string;
     genericCode: string;
     productLifeCycle: string;
+    modelType: string;
     modelNumber: string;
     modelLifeCycle: string;
   }[];
@@ -46,6 +47,7 @@ export default function App() {
 
   const sampleUrls = [
     'https://www.analog.com/cdp/ecommdata/en/mux08.js',
+    'https://www.analog.com/cdp/ecommdata/evalboard/en/21262-ezlite.js?v99',
     'https://www.analog.com/cdp/ecommdata/en/73M2901CE.js',
     'https://www.analog.com/cdp/ecommdata/en/AD7510.js',
     'https://www.analog.com/cdp/ecommdata/en/ADG401.js'
@@ -55,7 +57,7 @@ export default function App() {
     if (!d) return [];
     if (Array.isArray(d)) return d;
     if (typeof d === 'object') {
-      if (d.generic || d.buyModels || d.productLifeCycleStatus) {
+      if (d.generic || d.buyModels || d.evalModels || d.productLifeCycleStatus) {
         return [d];
       }
       for (const key of ['products', 'items', 'mux', 'data', 'parts', 'results', 'ecommData', 'catalog', 'content']) {
@@ -128,6 +130,7 @@ export default function App() {
               generic: data.data.generic || 'UNKNOWN',
               genericCode: data.data.GenericCode || '',
               productLifeCycle: data.data.productLifeCycleStatus || '',
+              modelType: 'N/A',
               modelNumber: '[ 0 Buy Models - No orderable models ]',
               modelLifeCycle: 'N/A'
             });
@@ -137,15 +140,46 @@ export default function App() {
               const genericCode = part.GenericCode || '';
               const productLifeCycle = part.productLifeCycleStatus || '';
 
-              if (part.buyModels && Array.isArray(part.buyModels) && part.buyModels.length > 0) {
-                part.buyModels.forEach((bm: any) => {
+              const allModels: { model: string; lifeCycle: string; modelType: 'buyModel' | 'evalModel' }[] = [];
+              const seenKeys = new Set<string>();
+
+              const addModel = (m: any, modelType: 'buyModel' | 'evalModel') => {
+                if (!m) return;
+                const mName = (m.model || m.orderablePartNumber || m.name || '').trim();
+                if (mName) {
+                  const life = (m.lifeCycle || '').trim();
+                  const key = `${mName.toLowerCase()}:::${life.toLowerCase()}:::${modelType}`;
+                  if (!seenKeys.has(key)) {
+                    seenKeys.add(key);
+                    allModels.push({
+                      model: mName,
+                      lifeCycle: life,
+                      modelType
+                    });
+                  }
+                }
+              };
+
+              // 1. Process buyModels (standard purchase models)
+              if (part.buyModels && Array.isArray(part.buyModels)) {
+                part.buyModels.forEach((m: any) => addModel(m, 'buyModel'));
+              }
+
+              // 2. Process evalModels (evaluation board models)
+              if (part.evalModels && Array.isArray(part.evalModels)) {
+                part.evalModels.forEach((m: any) => addModel(m, 'evalModel'));
+              }
+
+              if (allModels.length > 0) {
+                allModels.forEach(m => {
                   records.push({
                     sourceUrl: url,
                     generic,
                     genericCode,
                     productLifeCycle,
-                    modelNumber: bm.model || bm.orderablePartNumber || '',
-                    modelLifeCycle: bm.lifeCycle || ''
+                    modelType: m.modelType,
+                    modelNumber: m.model,
+                    modelLifeCycle: m.lifeCycle
                   });
                 });
               } else {
@@ -155,6 +189,7 @@ export default function App() {
                   generic,
                   genericCode,
                   productLifeCycle,
+                  modelType: 'N/A',
                   modelNumber: '[ 0 Buy Models - No orderable models ]',
                   modelLifeCycle: 'N/A'
                 });
@@ -181,6 +216,7 @@ export default function App() {
               generic: `ERROR: ${errMsg}`,
               genericCode: '',
               productLifeCycle: '',
+              modelType: 'ERROR',
               modelNumber: '[ FETCH FAILED / 404 ]',
               modelLifeCycle: 'ERROR'
             }],
@@ -199,6 +235,7 @@ export default function App() {
             generic: `ERROR: ${errMsg}`,
             genericCode: '',
             productLifeCycle: '',
+            modelType: 'ERROR',
             modelNumber: '[ NETWORK ERROR ]',
             modelLifeCycle: 'ERROR'
           }],
@@ -226,8 +263,7 @@ export default function App() {
 
   const generateCsvContent = (records: ProcessedFileResult['records']) => {
     const csvRows = [
-      'SourceURL\tGeneric\tGenericCode\tProductLifeCycle\tModelNumber\tModelLifeCycle'
-        .replace(/\t/g, ',')
+      'SourceURL,Generic,GenericCode,ProductLifeCycle,ModelType,ModelNumber,ModelLifeCycle'
     ];
 
     records.forEach(rec => {
@@ -236,6 +272,7 @@ export default function App() {
         rec.generic,
         rec.genericCode,
         rec.productLifeCycle,
+        rec.modelType,
         rec.modelNumber,
         rec.modelLifeCycle
       ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
@@ -317,7 +354,7 @@ export default function App() {
         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Target URLs</h2>
-            <p className="text-sm text-slate-500">Enter one URL per line. Output columns: SourceURL, Generic, GenericCode, ProductLifeCycle, ModelNumber, ModelLifeCycle.</p>
+            <p className="text-sm text-slate-500">Enter one URL per line. Output columns: SourceURL, Generic, GenericCode, ProductLifeCycle, ModelType, ModelNumber, ModelLifeCycle.</p>
           </div>
 
           <div className="space-y-3">
@@ -325,7 +362,7 @@ export default function App() {
               rows={6}
               value={urlsInput}
               onChange={(e) => setUrlsInput(e.target.value)}
-              placeholder="https://www.analog.com/cdp/ecommdata/en/mux08.js&#10;https://www.analog.com/cdp/ecommdata/en/AD7510.js&#10;https://www.analog.com/cdp/ecommdata/en/ADG401.js"
+              placeholder="https://www.analog.com/cdp/ecommdata/en/mux08.js&#10;https://www.analog.com/cdp/ecommdata/evalboard/en/21262-ezlite.js?v99&#10;https://www.analog.com/cdp/ecommdata/en/AD7510.js&#10;https://www.analog.com/cdp/ecommdata/en/ADG401.js"
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-4 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-mono"
             />
 
@@ -343,7 +380,7 @@ export default function App() {
                     }}
                     className="bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-700 px-2.5 py-1 rounded-lg transition-colors font-mono text-[11px]"
                   >
-                    +{sUrl.split('/').pop()}
+                    +{sUrl.split('/').pop()?.split('?')[0]}
                   </button>
                 ))}
               </div>
@@ -411,7 +448,7 @@ export default function App() {
                 <span>{showDetails ? 'Hide Processed URLs Status' : 'Show Processed URLs Status'}</span>
                 {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
-              <span className="text-xs text-slate-400 font-mono">Schema: SourceURL, Generic, GenericCode, ProductLifeCycle, ModelNumber, ModelLifeCycle</span>
+              <span className="text-xs text-slate-400 font-mono">Schema: SourceURL, Generic, GenericCode, ProductLifeCycle, ModelType, ModelNumber, ModelLifeCycle</span>
             </div>
 
             {/* Collapsible List of processed files */}
@@ -424,16 +461,30 @@ export default function App() {
                     <div className="space-y-1 overflow-hidden">
                       <div className="flex items-center space-x-2 font-mono text-slate-900 font-bold truncate">
                         {res.success ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                         ) : (
                           <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                         )}
                         <span className="truncate">{res.url}</span>
                       </div>
                       {res.success ? (
-                        <p className="text-slate-600">
-                          CSV Filename: <strong className="font-mono text-slate-800">{res.filename}</strong> | Parts: <strong className="text-blue-600">{res.parts.length}</strong> | Records: <strong className="text-emerald-700">{res.records.length}</strong> {res.records.some(r => r.modelNumber.includes('0 Buy Models')) ? <span className="text-amber-600 font-semibold">(Contains 0 Buy Models)</span> : ''}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2 text-slate-600">
+                          <span>CSV: <strong className="font-mono text-slate-800">{res.filename}</strong></span>
+                          <span>| Records: <strong className="text-emerald-700">{res.records.length}</strong></span>
+                          {res.records.some(r => r.modelType === 'buyModel') && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
+                              buyModel ({res.records.filter(r => r.modelType === 'buyModel').length})
+                            </span>
+                          )}
+                          {res.records.some(r => r.modelType === 'evalModel') && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">
+                              evalModel ({res.records.filter(r => r.modelType === 'evalModel').length})
+                            </span>
+                          )}
+                          {res.records.some(r => r.modelNumber.includes('0 Buy Models')) && (
+                            <span className="text-amber-600 font-semibold">(Contains 0 Buy Models)</span>
+                          )}
+                        </div>
                       ) : (
                         <p className="text-rose-700 font-medium">Error: {res.error} (Included in output as error record)</p>
                       )}
